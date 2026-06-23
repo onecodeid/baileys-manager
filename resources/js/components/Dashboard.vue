@@ -94,21 +94,26 @@
 
     <!-- QR Code Modal -->
     <div class="modal fade" :class="{ show: showQRModal }" style="display: block;" v-if="showQRModal">
-      <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-          <div class="modal-header">
+        <div class="modal-header">
             <h5 class="modal-title">Scan QR Code - {{ currentSession.name }}</h5>
-            <button type="button" class="btn-close" @click="showQRModal = false"></button>
-          </div>
-          <div class="modal-body text-center">
-            <img :src="currentQR" style="max-width: 320px; height: auto;" class="img-fluid" />
-            <p class="mt-3 text-muted">Buka WhatsApp → Link a Device → Scan QR Code ini</p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showQRModal = false">Close</button>
-          </div>
+            <button type="button" class="btn-close" @click="closeQRModal"></button>
         </div>
-      </div>
+        <div class="modal-body text-center">
+            <!-- Loading spinner kalau QR belum ready -->
+            <div v-if="!currentQR" class="py-4">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <p class="text-muted">Generating QR Code...</p>
+            </div>
+            <img v-else :src="currentQR" style="max-width: 320px; height: auto;" class="img-fluid" />
+            <p class="mt-3 text-muted">Buka WhatsApp → Link a Device → Scan QR Code ini</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeQRModal">Close</button>
+        </div>
+        </div>
+    </div>
     </div>
   </div>
 </template>
@@ -122,19 +127,31 @@ export default {
       showQRModal: false,
       newSession: { name: '' },
       currentSession: {},
-      currentQR: ''
+      currentQR: '',
+      qrPollingInterval: null,   // ⬅️ tambah ini
     }
   },
-  mounted() {
+
+  async mounted() {
+    await axios.get('/sanctum/csrf-cookie');
     this.fetchSessions();
-    // Refresh setiap 5 detik
     setInterval(() => this.fetchSessions(), 5000);
   },
+
   methods: {
     async fetchSessions() {
       try {
         const res = await axios.get('/api/sessions');
         this.sessions = res.data;
+
+        // Sync QR di modal kalau sedang terbuka
+        if (this.showQRModal && this.currentSession?.name) {
+          const updated = res.data.find(s => s.name === this.currentSession.name);
+          if (updated) {
+            this.currentQR = updated.qr_code;
+            if (updated.status === 'connected') this.closeQRModal();
+          }
+        }
       } catch (e) {
         console.error(e);
       }
@@ -145,12 +162,13 @@ export default {
         alert("Session Name tidak boleh kosong!");
         return;
       }
-
       try {
-        await axios.post('/api/sessions', this.newSession);
-        alert('Session berhasil dibuat! Silakan scan QR Code.');
+        const res = await axios.post('/api/sessions', this.newSession);
         this.showAddModal = false;
         this.newSession.name = '';
+
+        // Langsung buka QR modal
+        this.showQR(res.data);
         this.fetchSessions();
       } catch (e) {
         alert('Gagal membuat session: ' + (e.response?.data?.message || e.message));
@@ -161,17 +179,56 @@ export default {
       this.currentSession = session;
       this.currentQR = session.qr_code;
       this.showQRModal = true;
+      this.startQRPolling(session.name);
+    },
+
+    startQRPolling(sessionName) {
+      this.stopQRPolling(); // clear interval lama kalau ada
+      this.qrPollingInterval = setInterval(async () => {
+        try {
+          const res = await axios.get(`/api/sessions/${sessionName}/qr`);
+          const data = res.data;
+          this.currentQR = data.qr_code;
+
+          if (data.status === 'connected') {
+            this.closeQRModal();
+            alert(`✅ ${sessionName} berhasil terhubung ke WhatsApp!`);
+            this.fetchSessions();
+          }
+        } catch (e) {
+          console.error('QR poll error:', e);
+        }
+      }, 3000);
+    },
+
+    stopQRPolling() {
+      if (this.qrPollingInterval) {
+        clearInterval(this.qrPollingInterval);
+        this.qrPollingInterval = null;
+      }
+    },
+
+    closeQRModal() {
+      this.stopQRPolling();
+      this.showQRModal = false;
+      this.currentQR = '';
     },
 
     getStatusClass(status) {
       if (status === 'connected') return 'badge bg-success';
-      if (status === 'qr') return 'badge bg-warning';
+      if (status === 'qr')        return 'badge bg-warning text-dark';
+      if (status === 'connecting') return 'badge bg-info text-dark';
       return 'badge bg-secondary';
     },
 
     formatDate(date) {
       return new Date(date).toLocaleString('id-ID');
     }
+  },
+
+  // Cleanup interval saat komponen di-destroy
+  beforeDestroy() {
+    this.stopQRPolling();
   }
 }
 </script>
