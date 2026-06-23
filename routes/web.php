@@ -6,17 +6,31 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
 */
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/login');
 });
 
+// Auth Routes (Login, Register, Logout)
 Auth::routes();
 
-Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
+// Protected Routes (Hanya bisa diakses setelah login)
+Route::middleware('auth')->group(function () {
+
+    // Dashboard Utama
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+
+    // Redirect /home ke dashboard
+    Route::get('/home', function () {
+        return redirect('/dashboard');
+    })->name('home');
+});
+
+// Optional: Logout route (sudah ada di Auth::routes(), tapi bisa di-custom)
+Route::post('/logout', function () {
+    Auth::logout();
+    return redirect('/login');
+})->name('logout');
