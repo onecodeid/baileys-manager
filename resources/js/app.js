@@ -27,6 +27,11 @@ Vue.component('example-component', require('./components/ExampleComponent.vue').
  * or customize the JavaScript scaffolding to fit your unique needs.
  */
 
+import Dashboard from './components/Dashboard.vue';
+
 const app = new Vue({
     el: '#app',
+    components: {
+        'dashboard-component': Dashboard
+    }
 });
