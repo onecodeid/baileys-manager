@@ -7,7 +7,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-const AUTH_DIR = path.join(__dirname, '../auth');
+const AUTH_DIR = path.join(__dirname, 'auth');
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
 // ─── Session store (in-memory) ───────────────────────────────────────────────
