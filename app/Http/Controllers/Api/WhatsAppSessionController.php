@@ -20,23 +20,18 @@ class WhatsAppSessionController extends Controller
             'name' => 'required|string|unique:whats_app_sessions,name'
         ]);
 
-        // Cek apakah session sudah ada
-        $existing = WhatsAppSession::where('name', $request->name)->first();
-        if ($existing) {
-            return response()->json(['message' => 'Session name already exists'], 422);
-        }
-
         $session = WhatsAppSession::create([
             'name' => $request->name,
             'status' => 'qr',
             'last_active' => now()
         ]);
 
-        // Kirim request ke Baileys service (yang jalan di port 3000)
+        // Panggil Baileys yang ada di localhost:3000 (internal)
         try {
-            $response = Http::timeout(15)->post('http://localhost:3000/start-session', [
-                'session_name' => $request->name
-            ]);
+            $response = Http::timeout(20)
+                ->post('http://127.0.0.1:3000/start-session', [
+                    'session_name' => $request->name
+                ]);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -46,15 +41,9 @@ class WhatsAppSessionController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            // Tetap simpan session meski Baileys belum respond
-            \Log::error('Baileys connection failed: ' . $e->getMessage());
+            \Log::error('Baileys Error: ' . $e->getMessage());
         }
 
         return response()->json($session);
-    }
-
-    public function show($id)
-    {
-        return WhatsAppSession::findOrFail($id);
     }
 }
